@@ -1,4 +1,5 @@
 import numpy as np
+import time
 
 def run_ACO(d: np.array, iteration: int = 100, n_ants: int = 5, n_citys: int = 5, e: float = 0.5, alpha: float = 1, beta: float = 2):
 
@@ -11,8 +12,16 @@ def run_ACO(d: np.array, iteration: int = 100, n_ants: int = 5, n_citys: int = 5
 
     best_cost = np.inf
     best_route = None
+    best_route_history = []
+    best_cost_history = []  # najlepszy dotąd koszt po każdej iteracji (best-so-far)
 
-    for ite in range(iteration):
+    worst_cost = -np.inf
+    worst_route = None
+
+    avg_cost_history = []
+
+    time_start = time.time()
+    for _ in range(iteration):
 
         route[:, 0] = 1 # kazka mrowka odwiedza pierwsze miasto - startuje w 1 miescie
 
@@ -47,12 +56,26 @@ def run_ACO(d: np.array, iteration: int = 100, n_ants: int = 5, n_citys: int = 5
         # unikamy petli, gdzie liczymy odleglosci do miast sasiadujacych na trasei
         a = route[:, :-1] - 1 #miasta startowe - bez ostatniego
         b = route[:, 1:] - 1 #miasta koncowe - bez pierwszego
-        dist_cost = np.sum(d[a, b], axis=1)  
+        dist_cost = np.sum(d[a, b], axis=1)
+
+        # średni koszt tras populacji (wszystkich mrówek) w tej iteracji
+        avg_cost_history.append(float(dist_cost.mean()))
     
-        idx = np.argmin(dist_cost)
-        if dist_cost[idx] < best_cost:
-            best_cost = dist_cost[idx]
-            best_route = route[idx].copy()
+        index = np.argmin(dist_cost)
+        best_route_history.append(route[index].copy())
+        best_cost_history.append(float(best_cost)) # najlepszy koszt zapisany w kazdej iteracji
+
+        if dist_cost[index] < best_cost:
+            best_cost = dist_cost[index]
+            best_route = route[index].copy()
+
+        index = np.argmax(dist_cost)
+        if dist_cost[index] > worst_cost:
+            worst_cost = dist_cost[index]
+            worst_route = route[index].copy()
+
+        
+
 
         pheromone *= (1 - e) #parowanie feromonow
 
@@ -70,4 +93,16 @@ def run_ACO(d: np.array, iteration: int = 100, n_ants: int = 5, n_citys: int = 5
                 delta[i]
             ) #dodaj delta[i] do wszystkich (a,b) z trasy mrówki
 
-    return best_route, best_cost
+    
+    time_end = time.time()
+
+    return (
+        best_route, 
+        best_cost, 
+        worst_route, 
+        worst_cost,
+        best_route_history,
+        avg_cost_history,
+        best_cost_history,
+        time_end-time_start,
+        )
