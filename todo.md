@@ -77,7 +77,14 @@ Eksperyment 6 – Wpływ parowania feromonów ρ
 
 
 [ ] Wyniki przedstaw w tabelach oraz na wykresach (numeruj tabele i wykresy i odnoś się do nich w tekście):
-[ ] Tabela wyników + podsumowanie statystyk dla każdej konfiguracji.
-[ ] Wykres średniej z 5 uruchomień oraz obszar pokazujący min–max (lub ± std).
-[ ] Mapa trasy: wykres dwuwymiarowy punktów (atrakcji) z narysowaną najlepszą trasą (z etykietami lub numerami).
+[x] Tabela wyników + podsumowanie statystyk dla każdej konfiguracji.
+[x] Wykres średniej z 5 uruchomień oraz obszar pokazujący min–max (lub ± std).
+[x] Mapa trasy: wykres dwuwymiarowy punktów (atrakcji) z narysowaną najlepszą trasą (z etykietami lub numerami).
 [ ] Wykresy porównań badanych parametrów.
+
+
+
+
+[x] ZROBIĆ DLA DWÓCH PLIKÓW
+
+[ ] #todo: dodac subploty zeby byly widoczne wszystkie uruchomienia

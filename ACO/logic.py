@@ -1,7 +1,7 @@
 import numpy as np
 import time
 
-def run_ACO(d: np.array, iteration: int = 100, n_ants: int = 5, n_citys: int = 5, e: float = 0.5, alpha: float = 1, beta: float = 2):
+def run_ACO(d: np.array, iteration: int = 100, n_ants: int = 5, n_citys: int = 5, e: float = 0.5, alpha: float = 1, beta: float = 2, p_random: float = 0.0):
 
     visibility = np.zeros_like(d)
     visibility[d > 0] = 1 / d[d > 0]
@@ -45,7 +45,14 @@ def run_ACO(d: np.array, iteration: int = 100, n_ants: int = 5, n_citys: int = 5
                 else:
                     prob /= s #normalizacja
 
-                next_city = np.random.choice(n_citys, p=prob) #losowanie z rozkladu prawdopodobienstwa
+                if np.random.rand() < p_random:
+                    # losowanie nieodwiedzonego miasta 
+                    unvisited = np.where(~visited)[0]
+                    next_city = np.random.choice(unvisited)
+                else:
+                    # standardowy wybor wg feromonów i heurystyki
+                    next_city = np.random.choice(n_citys, p=prob) #losowanie z rozkladu prawdopodobienstwa
+
 
                 route[i, j] = next_city + 1
                 visited[next_city] = True
