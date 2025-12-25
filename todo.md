@@ -1,10 +1,11 @@
 Dla każdego uruchomienia zapisz:
 [x] Użyte parametry eksperymentu.
 [x] Najlepsza uzyskana długość trasy (koszt) i trasa (kolejność atrakcji).
-[x] Najgorsza i średnia długość trasy (jeśli mierzysz populację lub różne mrówki).
+[x] Najgorsza dlugosc trasy i 
+[x] średnia długość trasy (jeśli mierzysz populację lub różne mrówki).
 [x] Wartości najlepszej trasy w każdej iteracji (do wykresu).
 [x] Czas wykonania.
-[x] Dla zestawu powtórzeń oblicz statystyki: średnią arytmetyczną (mean), medianę (median), odchylenie standardowe (std), najgorszy wynik (min, najlepszy wynik (max) dla najlepszych wyników.
+[ ] Dla zestawu powtórzeń oblicz statystyki: średnią arytmetyczną (mean), medianę (median), odchylenie standardowe (std), najgorszy wynik (min, najlepszy wynik (max) dla najlepszych wyników.
 
 
 
