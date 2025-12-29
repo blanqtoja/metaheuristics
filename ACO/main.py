@@ -30,6 +30,16 @@ for fname in files:
     )
 
 exps = [
+    # najlepsze parametry
+    {
+        "exp_no": 10, # wykorzystane w jupyter notebook exp no. 10
+        "m": 50,  # mrowki
+        "p_random": 0.01, # wybor losowego miasta
+        "alpha": 1, # wplyw feromonow
+        "beta": 5, # wplyw dystansu
+        "T": 100, # iteracje
+        "p": 0.3, # parowanie feromonow
+    },
     # Eksperyment 1 - Wpływ liczebności mrówek m
     {
         "exp_no": 1,
@@ -275,7 +285,8 @@ for dataset in datasets:
 
     for ex in exps:
         runs_best_cost = []
-        all_best_history = []
+        all_avg_best_history = []
+        all_bests_cost_history = []
         times = []
 
         for run_idx in range(5):
@@ -298,10 +309,11 @@ for dataset in datasets:
             )
 
             runs_best_cost.append(best_cost)
-            all_best_history.append(avg_cost_history)
+            all_avg_best_history.append(avg_cost_history)
+            all_bests_cost_history.append(best_cost_history)
             times.append(time_run)
 
-            print(f"Run {run_idx+1}/5, dataset: {dataset["dataset"]}, exp: {ex["exp_no"]}: best_cost={int(best_cost)}, time={time_run:.2f}s")
+            print(f'Run {run_idx+1}/5, dataset: {dataset["dataset"]}, exp: {ex["exp_no"]}: best_cost={int(best_cost)}, time={time_run:.2f}s')
 
         mean_best = np.mean(runs_best_cost)
         std_best = np.std(runs_best_cost)
@@ -327,6 +339,8 @@ for dataset in datasets:
             "worst_cost": worst_cost,
             "avg_cost_history": avg_cost_history,  #średnia długość trasy
             "best_cost_history": best_cost_history,
+            "all_avg_best_history": all_avg_best_history,
+            "all_bests_cost_history": all_bests_cost_history, # hisotria wszystkich najlepszych rozwiazan
 
         })
 
