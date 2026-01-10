@@ -30,6 +30,12 @@ def run_PSO(fun: callable, S: int = 20, dimensions: int = 2, blo: float = -10.0,
     g_best_pos = np.copy(best_particle.best_position)
     g_best_cost = best_particle.best_cost
 
+    # Histories
+    g_best_pos_history = [np.copy(g_best_pos)]
+    g_best_cost_history = [g_best_cost]
+    avg_pos_history = []
+    avg_cost_history = []
+
     for _ in range(iteration):
         for p in swarm:
             rp = np.random.uniform(0, 1, dimensions)
@@ -59,12 +65,24 @@ def run_PSO(fun: callable, S: int = 20, dimensions: int = 2, blo: float = -10.0,
                     g_best_cost = curr_cost
                     g_best_pos = np.copy(p.position)
 
+        # Store histories at the end of each iteration
+        g_best_pos_history.append(np.copy(g_best_pos))
+        g_best_cost_history.append(g_best_cost)
+
+        # Calculate average position and cost in swarm
+        avg_pos = np.mean([p.position for p in swarm], axis=0)
+        avg_pos_history.append(avg_pos)
+
+        avg_cost = np.mean([fun(p.position) for p in swarm])
+        avg_cost_history.append(avg_cost)
+
     time_end = time.time()
-    return g_best_pos, g_best_cost, time_end - time_start
+    return g_best_pos, g_best_cost, time_end - time_start, g_best_pos_history, g_best_cost_history, avg_pos_history, avg_cost_history
 
 
 if __name__ == "__main__":
     def sphere_function(x): return np.sum(x**2)
 
-    best_pos, best_val, duration = run_PSO(sphere_function)
+    best_pos, best_val, duration, g_best_pos_hist, g_best_cost_hist, avg_pos_hist, avg_cost_hist = run_PSO(
+        sphere_function)
     print(best_pos, best_val, duration)
