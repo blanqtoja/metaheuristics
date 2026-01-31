@@ -19,15 +19,15 @@ CONFIG = {
     "penalty_vehicle": 2000.0,
 
     # Parametry SA
-    "sa_T_start": 2000.0,
-    "sa_alpha": 0.999,
-    "sa_T_min": 0.01,
-    "sa_log_interval": 1000,
-    "max_iterations": 100000,
+    "sa_T_start": 5000.0,
+    "sa_alpha": 0.9998,
+    "sa_T_min": 0.001,
+    "sa_log_interval": 5000,
+    "max_iterations": 500000,
 
     # Wagi ruchów
-    "prob_transfer": 0.4,
-    "prob_swap": 0.4,
+    "prob_transfer": 0.5,
+    "prob_swap": 0.3,
     "prob_2opt": 0.2,
 
     "show_plots": True
@@ -417,3 +417,7 @@ def visualize_solution(solution, customers, title="", save_path=None, show=True)
 
 if __name__ == "__main__":
     main()
+
+
+########
+# w geminii ostatni prompt nie zostal tu wklejony!!!
