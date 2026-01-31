@@ -6,28 +6,29 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 
-# ==========================================================
+
 # KONFIGURACJA EKSPERYMENTU
-# ==========================================================
 CONFIG = {
     "instance_path": "rc101.txt",
     "save_dir": "experiment_results",
 
-    # Kary (Hard Constraints)
+    # Kary
     "penalty_time_window": 500.0,
     "penalty_capacity": 5000.0,
-    # Zwiększamy karę za pojazd, aby algorytm desperacko chciał je usuwać
     "penalty_vehicle": 10000.0,
 
-    # Parametry SA (Dłuższe, wolniejsze chłodzenie)
+    # Parametry SA
     "sa_T_start": 5000.0,
-    "sa_alpha": 0.9999,      # Bardzo wolne chłodzenie - pozwoli na 100k+ iteracji
+    "sa_alpha": 0.9999,
     "sa_T_min": 0.01,
     "sa_log_interval": 2000,
-    "max_iterations": 300000,  # Zwiększony limit iteracji
+    "max_iterations": 300000,
 
-    # Wagi ruchów (Suma nie musi być 1, algorytm używa if/elif)
-    # Dodajemy logikę dla kill_route w kodzie
+    # Prawdopobobieństwo wybrania operatora
+    "op_kill_prob": 0.1,
+    "op_transfer_prob": 0.5,
+    "op_swap_prob": 0.8,
+
     "show_plots": True
 }
 
@@ -45,8 +46,7 @@ class Customer:
 
 def load_solomon(path):
     if not os.path.exists(path):
-        print(f"Brak pliku {path}. Generuję losowe dane testowe...")
-        return generate_dummy_data()
+        raise Exception(f"Brak pliku {path}")
 
     customers = []
     capacity = 0
@@ -67,7 +67,7 @@ def load_solomon(path):
                     else:
                         capacity = 200
 
-                elif "DATA SECTION" in line or "CUST NO." in line:
+                elif "CUST NO." in line:
                     break
             except StopIteration:
                 break
@@ -86,21 +86,9 @@ def load_solomon(path):
                 break
 
     except Exception as e:
-        print(f"Krytyczny błąd parsowania: {e}")
-        return generate_dummy_data()
+        print(f"Błąd parsowania: {e}")
 
     return customers, capacity
-
-
-def generate_dummy_data():
-    custs = [Customer(0, 50, 50, 0, 0, 1000, 0)]
-    for i in range(1, 21):
-        custs.append(Customer(
-            i, random.randint(0, 100), random.randint(0, 100),
-            random.randint(5, 20),
-            random.randint(0, 800), random.randint(850, 1000), 10
-        ))
-    return custs, 200
 
 
 def dist(a, b):
@@ -162,17 +150,17 @@ def calculate_total_cost(solution, customers, capacity, params):
             total += params["penalty_vehicle"]
     return total
 
-# ==========================================================
-# OPERATORY RUCHÓW
-# ==========================================================
 
+# operatory ruchu
 
+# transfer klienta pomiedzy trasami
 def op_transfer(solution):
     non_empty = [i for i, r in enumerate(solution) if len(r) > 2]
     if not non_empty:
         return None
 
-    r1_idx = random.choice(non_empty)
+    r1_idx = random.choice(non_empty)  # skad zabieramy klienta- źródło
+    # dokad zabieramy klienta - cel, mozna przeniesc klienta do pustej trasy
     r2_idx = random.randint(0, len(solution) - 1)
 
     if r1_idx == r2_idx:
@@ -189,6 +177,8 @@ def op_transfer(solution):
 
     return [(r1_idx, new_r1), (r2_idx, new_r2)]
 
+# wymiana klienta w tej samej lub innej trasie
+
 
 def op_swap(solution):
     non_empty = [i for i, r in enumerate(solution) if len(r) > 2]
@@ -204,8 +194,9 @@ def op_swap(solution):
     else:
         new_r2 = solution[r2_idx][:]
 
-    if len(new_r1) < 3 or len(new_r2) < 3:
-        return None
+    # zapewnione przez non_empty
+    # if len(new_r1) < 3 or len(new_r2) < 3:
+    #     return None
 
     c1_idx = random.randint(1, len(new_r1) - 2)
     c2_idx = random.randint(1, len(new_r2) - 2)
@@ -231,12 +222,8 @@ def op_2opt_random(solution):
 
     return [(r_idx, new_r)]
 
-# --- NOWY AGRESYWNY OPERATOR ---
-
 
 def op_kill_route(solution, customers, capacity):
-    """Próbuje usunąć najkrótszą trasę i rozparcelować jej klientów"""
-    # 1. Znajdź najkrótsze trasy
     routes_info = []
     for i, r in enumerate(solution):
         if len(r) > 2:
@@ -245,60 +232,60 @@ def op_kill_route(solution, customers, capacity):
     if len(routes_info) < 2:
         return None
 
-    # Sortuj od najkrótszej
     routes_info.sort(key=lambda x: x[1])
 
-    # Weź najkrótszą (lub jedną z najkrótszych, żeby nie utknąć)
+    # 0 - najkrotsza trasa, 0 - trasa z enumerate
     target_idx = routes_info[0][0]
 
-    # Jeśli mamy kilka o tej samej minimalnej długości, wylosuj jedną z nich
+    # mozliwy remis, wtedy losujemy, ktorą trasę odrzucić
     min_len = routes_info[0][1]
     candidates = [x[0] for x in routes_info if x[1] == min_len]
     target_idx = random.choice(candidates)
 
-    # Kopia tras
+    # kopia tras
     new_solution_map = {i: r[:] for i, r in enumerate(solution)}
 
-    # Klienci do przeniesienia
+    # klienci do przeniesienia z wybranej trasy
     customers_to_move = new_solution_map[target_idx][1:-1]
 
-    # "Czyścimy" trasę docelową
+    # usuwamy zawartosc trasy - depot -> depot
     new_solution_map[target_idx] = [0, 0]
 
-    # Potencjalne cele (inne niepuste trasy)
+    # trasy, gdzie beda mogli trafic klienci z wyzerowanej trasy
     targets = [i for i in range(len(solution)) if i !=
                target_idx and len(solution[i]) > 2]
 
-    # Próba wstawienia każdego klienta
+    # musimy wstawic kazdego klienta, inaczej przerywamy op_kill
     for cust_id in customers_to_move:
         inserted = False
-        # Mieszamy kolejność sprawdzania tras docelowych
+
+        # kolejnosc tras jest losowa
         random.shuffle(targets)
 
         for t_idx in targets:
             route = new_solution_map[t_idx]
-            # Best fit wewnątrz tej trasy
+            # best fit wewnątrz tej trasy
             best_pos = -1
 
-            # Sprawdzamy każdą pozycję
+            # w kazdej pozycji
             for p in range(1, len(route)):
+                # tworzymy tmp route, trzeba sprawdzic, czy sie miescimy w ramach czasowych i objetosciowych
                 temp_route = route[:p] + [cust_id] + route[p:]
                 valid, _, _, _ = check_route_validity(
                     temp_route, customers, capacity)
-                if valid:
+                if valid:  # nie szukamy najlepszego, gdy tylko pasuje, to dopisujemy klienta
                     best_pos = p
-                    break  # First valid fit (szybsze niż best fit)
+                    break
 
             if best_pos != -1:
                 new_solution_map[t_idx].insert(best_pos, cust_id)
                 inserted = True
                 break
 
+        # jesli jakikolwiek klient nie zostal dopisany do innej trasy, to anulujemy zmiany
         if not inserted:
-            # Porażka - nie da się upchnąć klientów
             return None
 
-    # Zbieramy zmiany
     changes = []
     for i in new_solution_map:
         if new_solution_map[i] != solution[i]:
@@ -306,12 +293,11 @@ def op_kill_route(solution, customers, capacity):
 
     return changes
 
-# ==========================================================
-# ALGORYTMY
-# ==========================================================
+# Algorytmy
 
 
 def build_initial_solution(customers, capacity):
+    # klienci sortowani wedlug czasu
     unassigned = sorted(list(range(1, len(customers))),
                         key=lambda x: customers[x].ready)
     solution = []
@@ -335,6 +321,7 @@ def build_initial_solution(customers, capacity):
                         best_pos = i
 
             if best_pos != -1:
+                # wstawiamy najlepszą kosztowo pozycję
                 route.insert(best_pos, cust_id)
                 inserted = True
                 break
@@ -346,7 +333,6 @@ def build_initial_solution(customers, capacity):
 
 
 def simulated_annealing(customers, capacity, params):
-    # Generujemy rozwiązanie początkowe
     current_sol = build_initial_solution(customers, capacity)
     current_cost = calculate_total_cost(
         current_sol, customers, capacity, params)
@@ -357,40 +343,21 @@ def simulated_annealing(customers, capacity, params):
     T = params["sa_T_start"]
     history = []
 
-    # Zmienne do Reheatingu
-    iter_since_improvement = 0
-    reheat_trigger = 10000  # Jeśli przez 10k iteracji brak poprawy -> Podgrzej
-
     print(f"Start koszt: {current_cost:.2f} | Pojazdów: {len(current_sol)}")
 
     iteration = 0
-    # Usuwamy warunek T > min, bo chcemy sterować temperaturą ręcznie przez reheating
-    # Polegamy głównie na max_iterations
-    while iteration < params["max_iterations"]:
-        iteration += 1
-        iter_since_improvement += 1
 
-        # --- MECHANIZM REHEATINGU ---
-        # Jeśli temperatura spadła nisko, a my utknęliśmy, podgrzej atmosferę
-        if T < 1.0 and iter_since_improvement > reheat_trigger:
-            print(
-                f"!!! REHEATING (Iter: {iteration}) - Reset temperatury do 1500.0 !!!")
-            T = 1500.0
-            iter_since_improvement = 0
-            # Opcjonalnie: Wróć do najlepszego znanego rozwiązania, żeby nie błądzić w nicości
-            current_sol = [r[:] for r in best_sol]
-            current_cost = best_cost
-        # ---------------------------
+    while iteration < params["max_iterations"] and T > params["sa_T_min"]:
+        iteration += 1
 
         r = random.random()
         changes = None
 
-        # Prawdopodobieństwa ruchów
-        if r < 0.1:
+        if r < params["op_kill_prob"]:
             changes = op_kill_route(current_sol, customers, capacity)
-        elif r < 0.5:
+        elif r < params["op_transfer_prob"]:
             changes = op_transfer(current_sol)
-        elif r < 0.8:
+        elif r < params["op_swap_prob"]:
             changes = op_swap(current_sol)
         else:
             changes = op_2opt_random(current_sol)
@@ -398,6 +365,7 @@ def simulated_annealing(customers, capacity, params):
         if not changes:
             continue
 
+        # dla zaoszczedzenia obliczen, liczymy tylko zmiany w trasach
         old_partial_cost = 0
         new_partial_cost = 0
 
@@ -412,24 +380,21 @@ def simulated_annealing(customers, capacity, params):
             if len(new_route) > 2:
                 new_partial_cost += params["penalty_vehicle"]
 
-        delta = new_partial_cost - old_partial_cost
+        delta = new_partial_cost - old_partial_cost  # obliczanie zmiany kosztu
 
+        # poprawa lub losowość wyboru gorszego rozw
         if delta < 0 or random.random() < math.exp(-delta / T):
             for r_idx, new_route in changes:
                 current_sol[r_idx] = new_route
 
-            current_cost += delta
+            current_cost += delta  # zmiana kosztu o delte
 
-            if current_cost < best_cost:  # - 0.001 (dla floatów)
+            if current_cost < best_cost:
                 best_cost = current_cost
                 best_sol = [r[:] for r in current_sol]
-                iter_since_improvement = 0  # Reset licznika poprawy
 
-        # Standardowe chłodzenie
+        # chłodzenie
         T *= params["sa_alpha"]
-        # Zabezpieczenie przed zejściem do zera absolutnego (dla dzielenia przez zero)
-        if T < 1e-5:
-            T = 1e-5
 
         if iteration % params["sa_log_interval"] == 0:
             v_count = len([r for r in best_sol if len(r) > 2])
