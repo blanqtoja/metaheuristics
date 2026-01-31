@@ -28,4 +28,45 @@ Testuję na rc101.txt - meiszanka random i klastrow
 
 
 [ ] - badania:
-    
+    zloty środek:
+    w_kill: 1
+    w_transfer: 4
+    w_swap: 3
+    w_2opt: 2 
+
+    razem maja 10 jednostek wagowych - prosto policzyc prawdop.
+
+
+EKSP 1
+Eksperyment 1: Wpływ Agresywności Redukcji Floty (w_kill)
+Cel: Sprawdzić, czy algorytm potrzebuje dedykowanego operatora do usuwania pojazdów, czy zrobi to "przy okazji".
+
+w_kill: 0
+w_kill: 1
+w_kill: 10
+
+
+
+Eksperyment 2: Wpływ Wygładzania Lokalnego (w_2opt)
+Cel: Wykazać różnicę między "szukaniem struktury" (przypisanie klientów do aut) a "szukaniem geometrii" (kolejność w aucie).
+
+
+w_2opt: 0
+w_2opt: 2
+w_2opt: 20
+
+
+Eksperyment 3: Dominacja Transferu (w_transfer)
+Cel: Transfer to "Koń Roboczy". Sprawdzamy, czy opieranie się tylko na nim jest wystarczające.
+
+w_transfer: 0
+w_transfer: 4
+w_transfer: 40
+
+
+Eksperyment 4: Rola Wymiany (w_swap)
+Cel: Sprawdzić, czy wymiana miejscami jest w ogóle potrzebna.
+
+w_swap: 0 
+w_swap: 3 
+w_swap: 30 
