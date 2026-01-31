@@ -5,12 +5,13 @@ import copy
 import matplotlib.pyplot as plt
 import numpy as np
 import time
-
+import json
+import datetime
 
 # KONFIGURACJA EKSPERYMENTU
 CONFIG = {
     "instance_path": "rc101.txt",
-    "save_dir": "experiment_results",
+    "save_dir": "kalibracja/op_kill_prob-0_25",
 
     # Kary
     "penalty_time_window": 500.0,
@@ -19,15 +20,16 @@ CONFIG = {
 
     # Parametry SA
     "sa_T_start": 5000.0,
-    "sa_alpha": 0.9999,
+    "sa_alpha": 0.999,
     "sa_T_min": 0.01,
     "sa_log_interval": 2000,
     "max_iterations": 300000,
 
-    # Prawdopobobieństwo wybrania operatora
-    "op_kill_prob": 0.1,
-    "op_transfer_prob": 0.5,
-    "op_swap_prob": 0.8,
+    # Prawdopobobieństwo wybrania operatora - wagi
+    "w_kill": 1,
+    "w_transfer": 4,
+    "w_swap": 3,
+    "w_2opt": 2,
 
     "show_plots": True
 }
@@ -333,6 +335,8 @@ def build_initial_solution(customers, capacity):
 
 
 def simulated_annealing(customers, capacity, params):
+    start_time = time.time()
+
     current_sol = build_initial_solution(customers, capacity)
     current_cost = calculate_total_cost(
         current_sol, customers, capacity, params)
@@ -343,26 +347,47 @@ def simulated_annealing(customers, capacity, params):
     T = params["sa_T_start"]
     history = []
 
+    v_start = len([r for r in current_sol if len(r) > 2])
+    dist_start = sum(dist(customers[r[i]], customers[r[i+1]])
+                     for r in current_sol for i in range(len(r)-1))
+    history.append({
+        "iter": 0,
+        "cost": current_cost,
+        "dist": dist_start,
+        "veh": v_start,
+        "temp": T
+    })
+
     print(f"Start koszt: {current_cost:.2f} | Pojazdów: {len(current_sol)}")
+
+    move_types = ["kill", "transfer", "swap", "2opt"]
+    move_weights = [
+        params["w_kill"],
+        params["w_transfer"],
+        params["w_swap"],
+        params["w_2opt"]
+    ]
 
     iteration = 0
 
     while iteration < params["max_iterations"] and T > params["sa_T_min"]:
         iteration += 1
 
-        r = random.random()
+        chosen_move = random.choices(move_types, weights=move_weights, k=1)[0]
+
         changes = None
 
-        if r < params["op_kill_prob"]:
+        if chosen_move == "kill":
             changes = op_kill_route(current_sol, customers, capacity)
-        elif r < params["op_transfer_prob"]:
+        elif chosen_move == "transfer":
             changes = op_transfer(current_sol)
-        elif r < params["op_swap_prob"]:
+        elif chosen_move == "swap":
             changes = op_swap(current_sol)
-        else:
+        elif chosen_move == "2opt":
             changes = op_2opt_random(current_sol)
 
         if not changes:
+            T *= params["sa_alpha"]
             continue
 
         # dla zaoszczedzenia obliczen, liczymy tylko zmiany w trasach
@@ -400,11 +425,32 @@ def simulated_annealing(customers, capacity, params):
             v_count = len([r for r in best_sol if len(r) > 2])
             dist_val = sum(dist(customers[r[i]], customers[r[i+1]])
                            for r in best_sol for i in range(len(r)-1))
-            history.append(best_cost)
+            history.append({
+                "iter": iteration,
+                "cost": best_cost,
+                "dist": dist_val,
+                "veh": v_count,
+                "temp": T
+            })
             print(
                 f"Iter: {iteration} | T: {T:.2f} | Best Cost: {best_cost:.2f} | Dist: {dist_val:.1f} | Veh: {v_count}")
 
-    return best_sol, history
+    end_time = time.time()
+
+    return best_sol, history, end_time - start_time
+
+
+def save_results_to_json(run_data, filename):
+    def convert(o):
+        if isinstance(o, np.int64):
+            return int(o)
+        if isinstance(o, np.float64):
+            return float(o)
+        return o
+
+    with open(filename, 'w') as f:
+        json.dump(run_data, f, indent=4, default=convert)
+    print(f"Wyniki zapisane do: {filename}")
 
 
 def main():
@@ -414,30 +460,87 @@ def main():
     customers, capacity = load_solomon(CONFIG["instance_path"])
     print(f"Załadowano {len(customers)-1} klientów. Pojemność: {capacity}")
 
-    best_sol, history = simulated_annealing(customers, capacity, CONFIG)
+    instance_name = os.path.splitext(
+        os.path.basename(CONFIG["instance_path"]))[0]
+    summary_stats = []
+    NUM_RUNS = 5
 
-    final_sol = [r for r in best_sol if len(r) > 2]
-    final_dist = sum(dist(customers[r[i]], customers[r[i+1]])
-                     for r in final_sol for i in range(len(r)-1))
+    for run_id in range(1, NUM_RUNS + 1):
+        print(f"URUCHOMIENIE {run_id}/{NUM_RUNS}")
 
-    print("\n=== WYNIK KOŃCOWY ===")
-    print(f"Liczba pojazdów: {len(final_sol)}")
-    print(f"Całkowity dystans: {final_dist:.2f}")
+        best_sol, history, exec_time = simulated_annealing(
+            customers, capacity, CONFIG)
 
-    visualize_solution(
-        final_sol, customers,
-        title=f"VRPTW Result | Veh: {len(final_sol)} | Dist: {final_dist:.1f}",
-        save_path=os.path.join(CONFIG["save_dir"], "optimized_result.png"),
-        show=CONFIG["show_plots"]
-    )
+        final_sol = [r for r in best_sol if len(r) > 2]
+        final_dist = sum(dist(customers[r[i]], customers[r[i+1]])
+                         for r in final_sol for i in range(len(r)-1))
+        final_vehicles = len(final_sol)
+        final_cost = history[-1]["cost"]
 
-    plt.figure()
-    plt.plot(history)
-    plt.title("Zbieżność funkcji kosztu")
-    plt.xlabel("Iteracja / Log Interval")
-    plt.ylabel("Koszt")
-    if CONFIG["show_plots"]:
-        plt.show()
+        # Przygotowanie danych do JSON
+        run_data = {
+            "meta": {
+                "instance": instance_name,
+                "run_id": run_id,
+                "timestamp": datetime.datetime.now().isoformat()
+            },
+            "parameters": CONFIG,
+            "results": {
+                "execution_time": exec_time,
+                "final_cost": final_cost,
+                "final_distance": final_dist,
+                "final_vehicles": final_vehicles
+            },
+            "history": history,  # Pełna historia zbieżności
+            "routes": final_sol  # Sama struktura tras
+        }
+
+        # Zapis do pliku: np. experiment_results/rc101_run_1.json
+        filename = os.path.join(
+            CONFIG["save_dir"], f"{instance_name}_run_{run_id}.json")
+        save_results_to_json(run_data, filename)
+
+        # Wizualizacja (opcjonalnie tylko dla najlepszego, tu zapisujemy każdą)
+        viz_path = os.path.join(
+            CONFIG["save_dir"], f"{instance_name}_run_{run_id}.png")
+        visualize_solution(final_sol, customers,
+                           title=f"Run {run_id} | Dist: {final_dist:.2f} | Veh: {final_vehicles}",
+                           save_path=viz_path, show=False)  # Show False, żeby nie blokować pętli
+
+        summary_stats.append({
+            "run": run_id,
+            "dist": final_dist,
+            "veh": final_vehicles,
+            "time": exec_time
+        })
+
+    print(f"Podsumowanie z {NUM_RUNS} uruchomien")
+    dists = [s["dist"] for s in summary_stats]
+    times = [s["time"] for s in summary_stats]
+    vehs = [s["veh"] for s in summary_stats]
+
+    avg_dist = np.mean(dists)
+    std_dist = np.std(dists)
+    best_dist = np.min(dists)
+    worst_dist = np.max(dists)
+
+    print(
+        f"Dystans: Najlepszy: {best_dist:.2f}, Najgorszy: {worst_dist:.2f}, Średni: {avg_dist:.2f}, Std: {std_dist:.2f}")
+    print(f"Pojazdy (średnio): {np.mean(vehs):.1f}")
+    print(f"Czas (średnio): {np.mean(times):.2f}s")
+
+    with open(os.path.join(CONFIG["save_dir"], f"{instance_name}_summary.txt"), "w") as f:
+        f.write(f"Instance: {instance_name}\n")
+        f.write(f"Runs: {NUM_RUNS}\n")
+        f.write(f"Best Dist: {best_dist:.2f}\n")
+        f.write(f"Worst Dist: {worst_dist:.2f}\n")
+        f.write(f"Avg Dist: {avg_dist:.2f}\n")
+        f.write(f"Std Dev: {std_dist:.2f}\n")
+        f.write(f"Avg Time: {np.mean(times):.2f}s\n")
+        f.write("-" * 20 + "\n")
+        for s in summary_stats:
+            f.write(
+                f"Run {s['run']}: Dist={s['dist']:.2f}, Veh={s['veh']}, Time={s['time']:.2f}s\n")
 
 
 def visualize_solution(solution, customers, title="", save_path=None, show=True):

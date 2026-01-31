@@ -1,0 +1,31 @@
+Plan:
+[x] - kalibracja - ustalenie najlepszych parametrów. Wybieram alpha i kill_prob, bo maja najwieksze znaczenie dla dzialania algorytmu
+   
+    "sa_alpha": 0.9999,
+    "op_kill_prob": 0.1,
+Scenariusz 1: Wpływ schematu chłodzenia (sa_alpha) (op_kill_prob = 0.1)
+
+    Test 1: 0.95 (Szybkie chłodzenie)
+
+    Test 2: 0.999 (Umiarkowane)
+
+    Test 3: 0.9999 (Wolne)
+
+Scenariusz 2: Wpływ strategii redukcji aut (op_kill_prob) (Stałe: sa_alpha = 0.999)
+
+    Test 1: 0.02 (Mała presja na redukcję)
+
+    Test 2: 0.10 (Średnia presja)
+
+    Test 3: 0.25 (Duża presja)
+
+Testuję na rc101.txt - meiszanka random i klastrow
+
+
+[x] - na podstawie kalibracji wybralem:
+    "sa_alpha": 0.99,
+    "op_kill_prob": 0.1,
+
+
+[ ] - badania:
+    
