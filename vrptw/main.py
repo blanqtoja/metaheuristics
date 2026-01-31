@@ -11,7 +11,7 @@ import datetime
 # KONFIGURACJA EKSPERYMENTU
 CONFIG = {
     "instance_path": "rc101.txt",
-    "save_dir": "kalibracja/op_kill_prob-0_25",
+    "save_dir": "experiment_results",
 
     # Kary
     "penalty_time_window": 500.0,
@@ -20,7 +20,7 @@ CONFIG = {
 
     # Parametry SA
     "sa_T_start": 5000.0,
-    "sa_alpha": 0.999,
+    "sa_alpha": 0.9999,
     "sa_T_min": 0.01,
     "sa_log_interval": 2000,
     "max_iterations": 300000,
@@ -31,7 +31,7 @@ CONFIG = {
     "w_swap": 3,
     "w_2opt": 2,
 
-    "show_plots": True
+    "show_plots": False
 }
 
 
@@ -453,68 +453,87 @@ def save_results_to_json(run_data, filename):
     print(f"Wyniki zapisane do: {filename}")
 
 
-def main():
-    if not os.path.exists(CONFIG["save_dir"]):
-        os.makedirs(CONFIG["save_dir"])
+def run_batch_experiment(experiment_name, param_name, param_value, dataset_filename):
 
-    customers, capacity = load_solomon(CONFIG["instance_path"])
-    print(f"Załadowano {len(customers)-1} klientów. Pojemność: {capacity}")
+    run_config = copy.deepcopy(CONFIG)
+    run_config[param_name] = param_value
+    run_config["instance_path"] = dataset_filename
 
-    instance_name = os.path.splitext(
-        os.path.basename(CONFIG["instance_path"]))[0]
+    instance_name = os.path.splitext(dataset_filename)[0]
+    exp_dir = os.path.join(
+        CONFIG["save_dir"],
+        experiment_name,
+        f"{param_name}_{param_value}",
+        instance_name
+    )
+
+    if not os.path.exists(exp_dir):
+        os.makedirs(exp_dir)
+
+    try:
+        customers, capacity = load_solomon(dataset_filename)
+    except Exception as e:
+        print(f"POMINIĘTO {dataset_filename}: {e}")
+        return
+
+    print(
+        f"\nSTART: {experiment_name} | {param_name}={param_value} | {instance_name}")
+
     summary_stats = []
     NUM_RUNS = 5
 
     for run_id in range(1, NUM_RUNS + 1):
-        print(f"URUCHOMIENIE {run_id}/{NUM_RUNS}")
+        print(f"   Run {run_id}/{NUM_RUNS}...", end=" ", flush=True)
 
+        # Przekazujemy run_config
         best_sol, history, exec_time = simulated_annealing(
-            customers, capacity, CONFIG)
+            customers, capacity, run_config)
 
         final_sol = [r for r in best_sol if len(r) > 2]
         final_dist = sum(dist(customers[r[i]], customers[r[i+1]])
                          for r in final_sol for i in range(len(r)-1))
         final_vehicles = len(final_sol)
-        final_cost = history[-1]["cost"]
+        final_cost = history[-1]["cost"] if history else 0
 
-        # Przygotowanie danych do JSON
+        print(f"Done. (Dist: {final_dist:.1f}, Veh: {final_vehicles})")
+
         run_data = {
             "meta": {
+                "experiment": experiment_name,
+                "param_changed": param_name,
+                "param_value": param_value,
                 "instance": instance_name,
                 "run_id": run_id,
                 "timestamp": datetime.datetime.now().isoformat()
             },
-            "parameters": CONFIG,
+            "parameters": run_config,
             "results": {
                 "execution_time": exec_time,
                 "final_cost": final_cost,
                 "final_distance": final_dist,
                 "final_vehicles": final_vehicles
             },
-            "history": history,  # Pełna historia zbieżności
-            "routes": final_sol  # Sama struktura tras
+            "history": history,
+            "routes": final_sol
         }
 
-        # Zapis do pliku: np. experiment_results/rc101_run_1.json
-        filename = os.path.join(
-            CONFIG["save_dir"], f"{instance_name}_run_{run_id}.json")
-        save_results_to_json(run_data, filename)
+        json_path = os.path.join(exp_dir, f"run_{run_id}.json")
+        save_results_to_json(run_data, json_path)
 
-        # Wizualizacja (opcjonalnie tylko dla najlepszego, tu zapisujemy każdą)
-        viz_path = os.path.join(
-            CONFIG["save_dir"], f"{instance_name}_run_{run_id}.png")
+        viz_path = os.path.join(exp_dir, f"run_{run_id}.png")
         visualize_solution(final_sol, customers,
-                           title=f"Run {run_id} | Dist: {final_dist:.2f} | Veh: {final_vehicles}",
-                           save_path=viz_path, show=False)  # Show False, żeby nie blokować pętli
+                           title=f"{experiment_name} | {param_name}={param_value} | Run {run_id}\nDist: {final_dist:.1f} | Veh: {final_vehicles}",
+                           save_path=viz_path, show=False)
 
         summary_stats.append({
             "run": run_id,
             "dist": final_dist,
             "veh": final_vehicles,
-            "time": exec_time
+            "time": exec_time,
+            "cost": final_cost
         })
 
-    print(f"Podsumowanie z {NUM_RUNS} uruchomien")
+    # plik podsumujacy
     dists = [s["dist"] for s in summary_stats]
     times = [s["time"] for s in summary_stats]
     vehs = [s["veh"] for s in summary_stats]
@@ -524,23 +543,63 @@ def main():
     best_dist = np.min(dists)
     worst_dist = np.max(dists)
 
-    print(
-        f"Dystans: Najlepszy: {best_dist:.2f}, Najgorszy: {worst_dist:.2f}, Średni: {avg_dist:.2f}, Std: {std_dist:.2f}")
-    print(f"Pojazdy (średnio): {np.mean(vehs):.1f}")
-    print(f"Czas (średnio): {np.mean(times):.2f}s")
-
-    with open(os.path.join(CONFIG["save_dir"], f"{instance_name}_summary.txt"), "w") as f:
+    summary_path = os.path.join(exp_dir, "summary_stats.txt")
+    with open(summary_path, "w") as f:
+        f.write(f"Experiment: {experiment_name}\n")
+        f.write(f"Parameter: {param_name} = {param_value}\n")
         f.write(f"Instance: {instance_name}\n")
-        f.write(f"Runs: {NUM_RUNS}\n")
-        f.write(f"Best Dist: {best_dist:.2f}\n")
-        f.write(f"Worst Dist: {worst_dist:.2f}\n")
-        f.write(f"Avg Dist: {avg_dist:.2f}\n")
-        f.write(f"Std Dev: {std_dist:.2f}\n")
-        f.write(f"Avg Time: {np.mean(times):.2f}s\n")
-        f.write("-" * 20 + "\n")
+        f.write("-" * 30 + "\n")
+        f.write(f"Best Dist:  {best_dist:.2f}\n")
+        f.write(f"Avg Dist:   {avg_dist:.2f}\n")
+        f.write(f"Std Dev:    {std_dist:.2f}\n")
+        f.write(f"Avg Veh:    {np.mean(vehs):.2f}\n")
+        f.write(f"Avg Time:   {np.mean(times):.2f}s\n")
+        f.write("-" * 30 + "\n")
         for s in summary_stats:
             f.write(
-                f"Run {s['run']}: Dist={s['dist']:.2f}, Veh={s['veh']}, Time={s['time']:.2f}s\n")
+                f"Run {s['run']}: Dist={s['dist']:.2f}, Veh={s['veh']}, Cost={s['cost']:.2f}\n")
+
+
+def main():
+
+    datasets = ["r101.txt", "c101.txt", "rc101.txt"]
+
+    experiments = [
+        # Eksperyment 1
+        ("Exp1_Kill_Aggression", "w_kill", [0, 1, 10]),
+
+        # Eksperyment 2
+        ("Exp2_2opt_Smoothing", "w_2opt", [0, 2, 20]),
+
+        # Eksperyment 3
+        ("Exp3_Transfer_Dominance", "w_transfer", [0, 4, 40]),
+
+        # Eksperyment 4
+        ("Exp4_Swap_Role", "w_swap", [0, 3, 30])
+    ]
+
+    # 4 eksp * 3 wart * 3 pliki = 36 serii
+    total_combinations = len(experiments) * 3 * len(datasets)
+    current_combination = 0
+
+    print(f"Start eksperymentów")
+    print(f"Całkowita liczba serii (po 5 uruchomień): {total_combinations}")
+    print(f"Dane zapisywane do: {CONFIG['save_dir']}")
+
+    start_total = time.time()
+
+    for exp_name, param_name, values in experiments:
+        for val in values:
+            for dataset in datasets:
+                current_combination += 1
+                print(f"SERIA {current_combination}/{total_combinations}")
+
+                run_batch_experiment(exp_name, param_name, val, dataset)
+
+    end_total = time.time()
+    elapsed = end_total - start_total
+    print(f"\n\nEksperymenty zakończone")
+    print(f"Całkowity czas: {elapsed/60:.2f} minut")
 
 
 def visualize_solution(solution, customers, title="", save_path=None, show=True):
