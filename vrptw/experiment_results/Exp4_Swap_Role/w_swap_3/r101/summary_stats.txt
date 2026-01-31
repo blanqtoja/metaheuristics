@@ -1,0 +1,15 @@
+Experiment: Exp4_Swap_Role
+Parameter: w_swap = 3
+Instance: r101
+------------------------------
+Best Dist:  1716.44
+Avg Dist:   1745.09
+Std Dev:    24.18
+Avg Veh:    19.40
+Avg Time:   5.51s
+------------------------------
+Run 1: Dist=1787.12, Veh=20, Cost=203911.91
+Run 2: Dist=1744.71, Veh=19, Cost=194975.80
+Run 3: Dist=1716.44, Veh=19, Cost=191716.44
+Run 4: Dist=1749.83, Veh=19, Cost=191978.21
+Run 5: Dist=1727.37, Veh=20, Cost=201730.02

@@ -1,0 +1,15 @@
+Experiment: Exp1_Kill_Aggression
+Parameter: w_kill = 0
+Instance: rc101
+------------------------------
+Best Dist:  1774.39
+Avg Dist:   1828.91
+Std Dev:    41.69
+Avg Veh:    17.80
+Avg Time:   1.96s
+------------------------------
+Run 1: Dist=1774.39, Veh=17, Cost=171774.39
+Run 2: Dist=1803.93, Veh=18, Cost=181803.93
+Run 3: Dist=1848.63, Veh=17, Cost=171851.53
+Run 4: Dist=1897.00, Veh=18, Cost=181897.00
+Run 5: Dist=1820.61, Veh=19, Cost=191820.61

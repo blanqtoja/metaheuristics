@@ -1,0 +1,15 @@
+Experiment: Exp2_2opt_Smoothing
+Parameter: w_2opt = 20
+Instance: r101
+------------------------------
+Best Dist:  1819.13
+Avg Dist:   1889.68
+Std Dev:    48.52
+Avg Veh:    20.80
+Avg Time:   3.30s
+------------------------------
+Run 1: Dist=1911.66, Veh=22, Cost=222059.47
+Run 2: Dist=1950.43, Veh=21, Cost=211951.25
+Run 3: Dist=1819.13, Veh=19, Cost=193381.39
+Run 4: Dist=1847.93, Veh=20, Cost=201992.93
+Run 5: Dist=1919.25, Veh=22, Cost=221919.25

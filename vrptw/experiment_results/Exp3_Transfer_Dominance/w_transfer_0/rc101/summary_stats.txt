@@ -1,0 +1,15 @@
+Experiment: Exp3_Transfer_Dominance
+Parameter: w_transfer = 0
+Instance: rc101
+------------------------------
+Best Dist:  2033.61
+Avg Dist:   2083.45
+Std Dev:    51.48
+Avg Veh:    16.80
+Avg Time:   11.97s
+------------------------------
+Run 1: Dist=2066.76, Veh=17, Cost=173280.08
+Run 2: Dist=2034.08, Veh=17, Cost=173518.68
+Run 3: Dist=2033.61, Veh=17, Cost=172033.61
+Run 4: Dist=2115.57, Veh=17, Cost=173475.29
+Run 5: Dist=2167.23, Veh=16, Cost=173052.18
