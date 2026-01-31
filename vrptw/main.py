@@ -346,6 +346,7 @@ def build_initial_solution(customers, capacity):
 
 
 def simulated_annealing(customers, capacity, params):
+    # Generujemy rozwiązanie początkowe
     current_sol = build_initial_solution(customers, capacity)
     current_cost = calculate_total_cost(
         current_sol, customers, capacity, params)
@@ -356,22 +357,35 @@ def simulated_annealing(customers, capacity, params):
     T = params["sa_T_start"]
     history = []
 
+    # Zmienne do Reheatingu
+    iter_since_improvement = 0
+    reheat_trigger = 10000  # Jeśli przez 10k iteracji brak poprawy -> Podgrzej
+
     print(f"Start koszt: {current_cost:.2f} | Pojazdów: {len(current_sol)}")
 
     iteration = 0
-
-    while iteration < params["max_iterations"] and T > params["sa_T_min"]:
+    # Usuwamy warunek T > min, bo chcemy sterować temperaturą ręcznie przez reheating
+    # Polegamy głównie na max_iterations
+    while iteration < params["max_iterations"]:
         iteration += 1
+        iter_since_improvement += 1
+
+        # --- MECHANIZM REHEATINGU ---
+        # Jeśli temperatura spadła nisko, a my utknęliśmy, podgrzej atmosferę
+        if T < 1.0 and iter_since_improvement > reheat_trigger:
+            print(
+                f"!!! REHEATING (Iter: {iteration}) - Reset temperatury do 1500.0 !!!")
+            T = 1500.0
+            iter_since_improvement = 0
+            # Opcjonalnie: Wróć do najlepszego znanego rozwiązania, żeby nie błądzić w nicości
+            current_sol = [r[:] for r in best_sol]
+            current_cost = best_cost
+        # ---------------------------
 
         r = random.random()
         changes = None
 
         # Prawdopodobieństwa ruchów
-        # 10% na agresywną redukcję trasy
-        # 40% na transfer (dobre do poprawiania)
-        # 30% na swap
-        # 20% na 2-opt
-
         if r < 0.1:
             changes = op_kill_route(current_sol, customers, capacity)
         elif r < 0.5:
@@ -406,14 +420,16 @@ def simulated_annealing(customers, capacity, params):
 
             current_cost += delta
 
-            if current_cost < best_cost:
+            if current_cost < best_cost:  # - 0.001 (dla floatów)
                 best_cost = current_cost
                 best_sol = [r[:] for r in current_sol]
-                # Logujemy od razu, jeśli znaleźliśmy coś super (mniej pojazdów)
-                # v_count = len([r for r in best_sol if len(r) > 2])
-                # print(f"*** New Best: {best_cost:.1f} (Veh: {v_count}) ***")
+                iter_since_improvement = 0  # Reset licznika poprawy
 
+        # Standardowe chłodzenie
         T *= params["sa_alpha"]
+        # Zabezpieczenie przed zejściem do zera absolutnego (dla dzielenia przez zero)
+        if T < 1e-5:
+            T = 1e-5
 
         if iteration % params["sa_log_interval"] == 0:
             v_count = len([r for r in best_sol if len(r) > 2])
