@@ -16,20 +16,18 @@ CONFIG = {
     # Kary (Hard Constraints)
     "penalty_time_window": 500.0,
     "penalty_capacity": 5000.0,
-    "penalty_vehicle": 2000.0,
+    # Zwiększamy karę za pojazd, aby algorytm desperacko chciał je usuwać
+    "penalty_vehicle": 10000.0,
 
-    # Parametry SA
+    # Parametry SA (Dłuższe, wolniejsze chłodzenie)
     "sa_T_start": 5000.0,
-    "sa_alpha": 0.9998,
-    "sa_T_min": 0.001,
-    "sa_log_interval": 5000,
-    "max_iterations": 500000,
+    "sa_alpha": 0.9999,      # Bardzo wolne chłodzenie - pozwoli na 100k+ iteracji
+    "sa_T_min": 0.01,
+    "sa_log_interval": 2000,
+    "max_iterations": 300000,  # Zwiększony limit iteracji
 
-    # Wagi ruchów
-    "prob_transfer": 0.5,
-    "prob_swap": 0.3,
-    "prob_2opt": 0.2,
-
+    # Wagi ruchów (Suma nie musi być 1, algorytm używa if/elif)
+    # Dodajemy logikę dla kill_route w kodzie
     "show_plots": True
 }
 
@@ -46,7 +44,6 @@ class Customer:
 
 
 def load_solomon(path):
-    # POPRAWKA 1: Lepsza obsługa błędów i parsowania
     if not os.path.exists(path):
         print(f"Brak pliku {path}. Generuję losowe dane testowe...")
         return generate_dummy_data()
@@ -63,33 +60,25 @@ def load_solomon(path):
             try:
                 line = next(iterator)
                 if "CAPACITY" in line:
-                    # POPRAWKA: Linia może wyglądać tak: "25   200"
-                    # Musimy wziąć ostatnią liczbę (200), a nie całość
                     cap_line = next(iterator)
                     parts = cap_line.split()
                     if len(parts) >= 1:
-                        # Ostatni element to zazwyczaj pojemność
                         capacity = int(parts[-1])
                     else:
-                        capacity = 200  # Fallback
+                        capacity = 200
 
                 elif "DATA SECTION" in line or "CUST NO." in line:
                     break
             except StopIteration:
                 break
 
-        # Czytanie klientów
         while True:
             try:
                 line = next(iterator)
                 parts = line.split()
-                # Pomijamy linie, które nie zaczynają się od cyfry (np. nagłówki kolumn)
                 if not parts or not parts[0].isdigit():
                     continue
-
                 data = list(map(int, parts))
-                # Format: CUST NO., X, Y, DEMAND, READY, DUE, SERVICE
-                # Uwaga: Niektóre pliki Solomona mają inną liczbę kolumn, ale pierwsze 7 jest standardem
                 if len(data) >= 7:
                     customers.append(
                         Customer(data[0], data[1], data[2], data[3], data[4], data[5], data[6]))
@@ -98,14 +87,12 @@ def load_solomon(path):
 
     except Exception as e:
         print(f"Krytyczny błąd parsowania: {e}")
-        # Zwracamy dummy data, żeby program się nie wywalił całkowicie przy debugowaniu
         return generate_dummy_data()
 
     return customers, capacity
 
 
 def generate_dummy_data():
-    print("Generowanie danych losowych (Dummy Data)...")
     custs = [Customer(0, 50, 50, 0, 0, 1000, 0)]
     for i in range(1, 21):
         custs.append(Customer(
@@ -181,7 +168,6 @@ def calculate_total_cost(solution, customers, capacity, params):
 
 
 def op_transfer(solution):
-    # POPRAWKA 2: Zwracamy None zamiast (None, None, None)
     non_empty = [i for i, r in enumerate(solution) if len(r) > 2]
     if not non_empty:
         return None
@@ -245,6 +231,81 @@ def op_2opt_random(solution):
 
     return [(r_idx, new_r)]
 
+# --- NOWY AGRESYWNY OPERATOR ---
+
+
+def op_kill_route(solution, customers, capacity):
+    """Próbuje usunąć najkrótszą trasę i rozparcelować jej klientów"""
+    # 1. Znajdź najkrótsze trasy
+    routes_info = []
+    for i, r in enumerate(solution):
+        if len(r) > 2:
+            routes_info.append((i, len(r)))
+
+    if len(routes_info) < 2:
+        return None
+
+    # Sortuj od najkrótszej
+    routes_info.sort(key=lambda x: x[1])
+
+    # Weź najkrótszą (lub jedną z najkrótszych, żeby nie utknąć)
+    target_idx = routes_info[0][0]
+
+    # Jeśli mamy kilka o tej samej minimalnej długości, wylosuj jedną z nich
+    min_len = routes_info[0][1]
+    candidates = [x[0] for x in routes_info if x[1] == min_len]
+    target_idx = random.choice(candidates)
+
+    # Kopia tras
+    new_solution_map = {i: r[:] for i, r in enumerate(solution)}
+
+    # Klienci do przeniesienia
+    customers_to_move = new_solution_map[target_idx][1:-1]
+
+    # "Czyścimy" trasę docelową
+    new_solution_map[target_idx] = [0, 0]
+
+    # Potencjalne cele (inne niepuste trasy)
+    targets = [i for i in range(len(solution)) if i !=
+               target_idx and len(solution[i]) > 2]
+
+    # Próba wstawienia każdego klienta
+    for cust_id in customers_to_move:
+        inserted = False
+        # Mieszamy kolejność sprawdzania tras docelowych
+        random.shuffle(targets)
+
+        for t_idx in targets:
+            route = new_solution_map[t_idx]
+            # Best fit wewnątrz tej trasy
+            best_pos = -1
+
+            # Sprawdzamy każdą pozycję
+            for p in range(1, len(route)):
+                temp_route = route[:p] + [cust_id] + route[p:]
+                valid, _, _, _ = check_route_validity(
+                    temp_route, customers, capacity)
+                if valid:
+                    best_pos = p
+                    break  # First valid fit (szybsze niż best fit)
+
+            if best_pos != -1:
+                new_solution_map[t_idx].insert(best_pos, cust_id)
+                inserted = True
+                break
+
+        if not inserted:
+            # Porażka - nie da się upchnąć klientów
+            return None
+
+    # Zbieramy zmiany
+    changes = []
+    for i in new_solution_map:
+        if new_solution_map[i] != solution[i]:
+            changes.append((i, new_solution_map[i]))
+
+    return changes
+
 # ==========================================================
 # ALGORYTMY
 # ==========================================================
@@ -305,15 +366,21 @@ def simulated_annealing(customers, capacity, params):
         r = random.random()
         changes = None
 
-        if r < params["prob_transfer"]:
+        # Prawdopodobieństwa ruchów
+        # 10% na agresywną redukcję trasy
+        # 40% na transfer (dobre do poprawiania)
+        # 30% na swap
+        # 20% na 2-opt
+
+        if r < 0.1:
+            changes = op_kill_route(current_sol, customers, capacity)
+        elif r < 0.5:
             changes = op_transfer(current_sol)
-        elif r < params["prob_transfer"] + params["prob_swap"]:
+        elif r < 0.8:
             changes = op_swap(current_sol)
         else:
             changes = op_2opt_random(current_sol)
 
-        # Tutaj był błąd logiczny: (None, None, None) było 'True'
-        # Teraz changes to None albo lista, więc działa poprawnie.
         if not changes:
             continue
 
@@ -342,6 +409,9 @@ def simulated_annealing(customers, capacity, params):
             if current_cost < best_cost:
                 best_cost = current_cost
                 best_sol = [r[:] for r in current_sol]
+                # Logujemy od razu, jeśli znaleźliśmy coś super (mniej pojazdów)
+                # v_count = len([r for r in best_sol if len(r) > 2])
+                # print(f"*** New Best: {best_cost:.1f} (Veh: {v_count}) ***")
 
         T *= params["sa_alpha"]
 
@@ -361,7 +431,6 @@ def main():
         os.makedirs(CONFIG["save_dir"])
 
     customers, capacity = load_solomon(CONFIG["instance_path"])
-    # Jeśli load_solomon zwróci dummy data (z powodu błędu), capacity będzie 200
     print(f"Załadowano {len(customers)-1} klientów. Pojemność: {capacity}")
 
     best_sol, history = simulated_annealing(customers, capacity, CONFIG)
@@ -384,7 +453,7 @@ def main():
     plt.figure()
     plt.plot(history)
     plt.title("Zbieżność funkcji kosztu")
-    plt.xlabel("Iteracja")
+    plt.xlabel("Iteracja / Log Interval")
     plt.ylabel("Koszt")
     if CONFIG["show_plots"]:
         plt.show()
@@ -417,7 +486,3 @@ def visualize_solution(solution, customers, title="", save_path=None, show=True)
 
 if __name__ == "__main__":
     main()
-
-
-########
-# w geminii ostatni prompt nie zostal tu wklejony!!!
